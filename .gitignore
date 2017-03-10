@@ -5,7 +5,7 @@
 /straight_hair/*
 
 # cropped samples
-/data/*	
+data/*
 
 #downloaded OpenCV face recoginition haarcascades files
 code/haarcascades/
