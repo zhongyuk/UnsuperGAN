@@ -1,0 +1,13 @@
+# compiled python file
+*.pyc
+
+# scrapped images
+/straight_hair/*
+
+# cropped samples
+/data/*	
+
+#downloaded OpenCV face recoginition haarcascades files
+code/haarcascades/
+
+*.DS_Store
