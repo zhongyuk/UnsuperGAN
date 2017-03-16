@@ -4,6 +4,7 @@ from ops import *
 import time
 import scipy.stats
 from prepare_mnist import *
+from prepare_cifar import *
 
 def generate_Z(batch_size, z_dim): 
 	# sample from Gaussian normal
@@ -26,66 +27,70 @@ def embed(cls, Z):
 
 def generator(cZ, is_training): # cZ (class and noise joint) latent vector: [batch_size, z_dim]
 	# project cZ into dense layer1 - cZ - [-1, z_dim]
-	layer1 = dense(cZ, "g_dense1")			#[-1, 1024]
+	layer1 = dense(cZ, "g_dense1")			#[-1, 4*4*384]
 	# Batch Norm
-	layer1 = batch_norm(layer1, 'g_dense1', is_training) #[-1, 1024]
+	#layer1 = batch_norm(layer1, 'g_dense1', is_training) #[-1, 4*4*384]
 	# Activation
-	layer1 = activation(layer1, 'leaky') 	#[-1, 1024]
-
-	# Dense layer2
-	layer2 = dense(layer1, 'g_dense2')		#[-1, 7*7*256]
-	# Batch Norm
-	layer2 = batch_norm(layer2, 'g_dense2', is_training) #[-1, 7*7*256]
-	# Activation
-	layer2 = activation(layer2, 'leaky')  	#[-1, 7*7*256]
+	layer1 = activation(layer1, 'leaky') 	#[-1, 4*4*384]
 
 	# reshape 
-	reshaped = reshape_tensor(layer2, [-1, 7, 7, 256]) #[-1, 7, 7, 256]
+	reshaped = reshape_tensor(layer1, [-1, 4, 4, 384]) #[-1, 4, 4, 384]
 
 	# Deconv 2D
 	batch_size = reshaped.get_shape().as_list()[0]
-	layer3 = deconv2D(reshaped, [batch_size, 14, 14, 64], 'g_deconv1') 	#[-1, 14, 14, 64]
+	layer2 = deconv2D(reshaped, [batch_size, 8, 8, 192], 'g_deconv1') 	#[-1, 8, 8, 192]
 	# Batch Norm
-	layer3 = batch_norm(layer3, 'g_deconv1', is_training) 	#[-1, 14, 14, 64]
+	layer2 = batch_norm(layer2, 'g_deconv1', is_training) 	#[-1, 8, 8, 192]
 	# Activation
-	layer3 = activation(layer3, 'leaky')		#[-1, 14, 14, 64]
+	layer2 = activation(layer2, 'leaky')		#[-1, 8, 8, 192]
 
 	# Deconv 2D
-	layer4 = deconv2D(layer3, [batch_size, 28, 28, 1], 'g_deconv2')		#[-1, 28, 28, 1]
-	# output deconv layer no batch norm??
+	layer3 = deconv2D(layer2, [batch_size, 16, 16, 96], 'g_deconv2')	#[-1, 16, 16, 96]
+	layer3 = batch_norm(layer3, 'g_deconv2', is_training)
+	layer3 = activation(layer3, 'leaky')
+ 
+	# Deconv 2D
+	layer4 = deconv2D(layer3, [batch_size, 32, 32, 3], 'g_deconv3')		#[-1, 32, 32, 3]
+	# output deconv layer - No batch norm
 	layer4 = activation(layer4, 'tanh') # recommend 'tanh' output
 
 	return layer4
 
 
-def discriminator(X, is_training): # X - input image: [batch_size, 28, 28, 1]
-	# Conv2D - X: [-1, 28, 28, 1]
-	layer1 = conv2D(X, 'd_conv1') 								#[-1, 28, 28, 64]
-	layer1 = batch_norm(layer1, 'd_conv1', is_training)	#[-1, 28, 28, 64]
-	layer1 = activation(layer1, 'leaky')						#[-1, 28, 28, 64]
-	layer1 = pooling(layer1, 'avg') 							#[-1, 14, 14, 64]
+def discriminator(X, is_training): # X - input image: [batch_size, 32, 32, 3]
+	# Conv2D - X: [-1, 32, 32, 3]
+	layer1 = conv2D(X, 'd_conv1') 								#[-1, 32, 32, 32]
+	#layer1 = batch_norm(layer1, 'd_conv1', is_training)		#[-1, 32, 32, 32]
+	layer1 = activation(layer1, 'leaky')						#[-1, 32, 32, 32]
+	layer1 = pooling(layer1, 'avg') 							#[-1, 16, 16, 32]
 	
 
 	# Conv2D
-	layer2 = conv2D(layer1, 'd_conv2')						#[-1, 14, 14, 256]
-	layer2 = batch_norm(layer2, 'd_conv2', is_training)		#[-1, 14, 14, 256]
-	layer2 = activation(layer2, 'leaky')					#[-1, 14, 14, 256]
-	layer2 = pooling(layer2, 'avg') 						#[-1, 7, 7, 256]
+	layer2 = conv2D(layer1, 'd_conv2')						#[-1, 16, 16, 64]
+	layer2 = batch_norm(layer2, 'd_conv2', is_training)		#[-1, 16, 16, 64]
+	layer2 = activation(layer2, 'leaky')					#[-1, 16, 16, 64]
+	layer2 = pooling(layer2, 'avg') 						#[-1, 8, 8, 64]
+
+	# Conv2D
+	layer3 = conv2D(layer2, 'd_conv3')						#[-1, 8, 8, 128]
+	layer3 = batch_norm(layer3, 'd_conv3', is_training)		#[-1, 8, 8, 128]
+	layer3 = activation(layer3, 'leaky')					#[-1, 8, 8, 128]
+	layer3 = pooling(layer3, 'avg') 						#[-1, 4, 4, 128]
 
 	# Reshape
-	reshaped = reshape_tensor(layer2, [-1, 7*7*256]) 		#[-1, 7*7*256]
+	reshaped = reshape_tensor(layer3, [-1, 4*4*128]) 		#[-1, 4*4*128]
+
+	# Conv2D
+	#layer4 = dense(reshaped, 'd_conv3')						#[-1, 1024]
+	#layer4 = batch_norm(layer4, 'd_dense1', is_training)	#[-1, 1024]
+	#layer4 = activation(layer4, 'leaky')					#[-1, 1024]
 
 	# Dense/FC
-	layer3 = dense(reshaped, 'd_dense1')					#[-1, 1024]
-	layer3 = batch_norm(layer3, 'd_dense1', is_training)	#[-1, 1024]
-	layer3 = activation(layer3, 'leaky')					#[-1, 1024]
-
-	# Dense/FC
-	dense_cls = dense(layer3, 'd_dense_cls')				#[-1, num_class]
+	dense_cls = dense(reshaped, 'd_dense_cls')				#[-1, num_class]
 	#layer4 = batch_norm(layer4, 'd_dense2', is_training)	#[-1, num_class]
 	output_cls = activation(dense_cls, 'softmax')			#[-1, num_class]
 
-	dense_src = dense(layer3, 'd_dense_src')				#[-1, 1]
+	dense_src = dense(reshaped, 'd_dense_src')				#[-1, 1]
 	output_src = activation(dense_src, 'sigmoid')			#[-1, 1]
 
 	return [output_cls, output_src]
@@ -98,26 +103,27 @@ def train_model(Xr, yr, epoches, learning_rate):
 	fake_src_np = np.zeros([batch_size, 1], dtype=np.float32)
 
 	# latent Z shape
-	z_dim = 100
-	num_class = 2
+	z_dim = 110
+	num_class = 10
 
-	G_wt_shapes = [ ['embeding', [num_class, z_dim]	, z_dim, False],
-					['g_dense1', [z_dim, 1024]		, 1024, True],
-					['g_dense2', [1024, 7*7*256]	, 7*7*256, True],
-					['g_deconv1',[5, 5, 64, 256]	, 64, True],
-					['g_deconv2', [5, 5, 1, 64]		, 1, False] ]
+	G_wt_shapes = [ ['embeding', [num_class, z_dim]	, z_dim, 	False],
+					['g_dense1', [z_dim, 4*4*384]	, 4*4*384,	False],
+					['g_deconv1',[5, 5, 192, 384]	, 192, 		True],
+					['g_deconv2',[5, 5, 96, 192]	, 96, 		True],
+					['g_deconv3', [5, 5, 3, 96]		, 3, 		False] ]
 
-	D_wt_shapes = [['d_conv1',  [5, 5, 1, 64]	, 64,  True],
-				   ['d_conv2' , [5, 5, 64, 256]	, 256, True],
-				   ['d_dense1', [7*7*256, 1024]	, 1024, True],
-				   ['d_dense_src', [1024, 1]	, 1, False],# fake or real
-				   ['d_dense_cls', [1024, num_class], num_class, False]] # only 2 category....
+	D_wt_shapes = [['d_conv1', [3, 3, 3, 32]	, 32, False],
+				   ['d_conv2', [3, 3, 32, 64]	, 64, True],
+				   ['d_conv3', [3, 3, 64, 128]   , 128, True],
+				   #['d_conv4', [3, 3, 64, 128]	, 128, True],
+				   ['d_dense_src', [4*4*128, 1]	, 1, False],# fake or real - sigmoid
+				   ['d_dense_cls', [4*4*128, num_class], num_class, False]] # cls - softmax
 
 	graph = tf.Graph()
 	with graph.as_default():
 		tf_z = tf.placeholder(tf.float32, shape=[batch_size, z_dim])
 		#d_f = tf.placeholder(tf.float32, shape=[batch_size, 28, 28, 1])
-		real_images = tf.placeholder(tf.float32, shape=[batch_size, 28, 28, 1])
+		real_images = tf.placeholder(tf.float32, shape=[batch_size, 32, 32, 3])
 		real_src = tf.constant(real_src_np)
 		fake_src = tf.constant(fake_src_np)
 		true_cls = tf.placeholder(tf.float32, shape=[batch_size, num_class])
@@ -157,9 +163,9 @@ def train_model(Xr, yr, epoches, learning_rate):
 			#tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='D'))
 		#optimizer.apply_gradients(grads_and_vars)
 
-		g_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(Gloss, 
+		g_optimizer = tf.train.AdamOptimizer(learning_rate, beta1=0.5).minimize(Gloss, 
 			var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='G'))
-		d_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(Dloss, 
+		d_optimizer = tf.train.AdamOptimizer(learning_rate, beta1=0.5).minimize(Dloss, 
 			var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='D'))
 
 	with tf.Session(graph=graph) as sess:
@@ -176,13 +182,25 @@ def train_model(Xr, yr, epoches, learning_rate):
 			_, _, Gls, Dls, fk_imgs = sess.run([g_optimizer, d_optimizer, Gloss, Dloss, fake_images],
 										feed_dict=feed_dict)
 			tm = time.time()-t
-			print("Epoch: %d\tGenerator loss: %.4f\tDiscriminator loss: %.4f\tTime cost: %.2f"
+			print("Epoch: %d\tGenerator loss: %.4f\t\tDiscriminator loss: %.4f\tTime cost: %.2f"
 				 %(epoch, Gls, Dls, tm))
+		return fk_imgs
 
+def mnist_trial():
+	mnist_fn = '/Users/Zhongyu/Documents/projects/kaggle/mnist/train.csv'
+	#mnist_fn = '/home/paperspace/Documents/train.csv'
+	Xr, yr = prepare_mnist2(mnist_fn)
+	return Xr, yr
+
+def cifar_trial():
+	cifar_fn = "/Users/Zhongyu/Documents/projects/CNNplayground/cifar10/data/"
+	#cifar_fn = '/home/paperspace/Documents/cifar_data/'
+	datalist = prepare_cifar10_input(cifar_fn)
+	Xr, yr = datalist[0], datalist[1]
+	return Xr, yr
 
 if __name__=='__main__':
-	mnist_fn = '/Users/Zhongyu/Documents/projects/kaggle/mnist/train.csv'
-	Xr, yr = prepare_mnist2(mnist_fn)
-	train_model(Xr, yr, 25, 0.0002)
+	Xr, yr = cifar_trial()
+	fk_imgs = train_model(Xr, yr, 5, 0.0002)
 
 
