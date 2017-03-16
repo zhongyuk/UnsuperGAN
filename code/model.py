@@ -156,6 +156,11 @@ def train_model(Xr, yr, epoches, learning_rate):
 		Lcls = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(fk_cls, true_cls)) + \
 			   tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(rl_cls, true_cls))
 
+		rl_src_pred = tf.nn.sigmoid(rl_src)
+		fk_src_pred = tf.nn.sigmoid(fk_src)
+		rl_cls_pred = tf.nn.softmax(rl_cls)
+		fk_cls_pred = tf.nn.softmax(fk_cls)
+
 		Dloss = Lcls + Lsrc
 		Gloss = Lcls - Lsrc
 		# manage gradient update for the Discriminator
@@ -183,18 +188,21 @@ def train_model(Xr, yr, epoches, learning_rate):
 			batch_y = yr[offset:(offset+batch_size), :]
 			batch_Z = generate_Z(batch_size, z_dim)
 			feed_dict = {real_images: batch_X, true_cls: batch_y, tf_z: batch_Z, is_train:True}
-			_, _, Gls, Dls, fk_imgs = sess.run([g_optimizer, d_optimizer, Gloss, Dloss, fake_images],
-										feed_dict=feed_dict)
+			_, _, Gls, Dls, fk_imgs, rl_pred, fk_pred, cls_pred_rlin, cls_pred_fkin = sess.run([g_optimizer, d_optimizer, \
+				Gloss, Dloss, fake_images, rl_src_pred, fk_src_pred, rl_cls_pred, fk_cls_pred], feed_dict=feed_dict)
 			#_, Gls, fk_imgs = sess.run([g_optimizer, Gloss, fake_images], feed_dict=feed_dict)
 			#_, Dls			= sess.run([d_optimizer, Dloss], feed_dict=feed_dict)
 			tm = time.time()-t
 			Gloss_rcd[epoch] = Gls
 			Dloss_rcd[epoch] = Dls
+			rl_pred_acc, fk_pred_acc = compute_src_pred(rl_pred, fk_pred)
+			rli_cls_acc, fki_cls_acc = compute_cls_pred(cls_pred_rlin, cls_pred_fkin, batch_y)
+
 			if epoch%1000==0:
 				d = {'Xreal': batch_X, 'yreal': batch_y, 'generated': fk_imgs}
 				fkimg_rcd.append(d)
-			print("Epoch: %d\tGenerator loss: %.4f\t\tDiscriminator loss: %.4f\tTime cost: %.2f"
-				 %(epoch, Gls, Dls, tm))
+			print("Epoch: %d\tGloss: %.4f\tDloss: %.4f\trSrcPredAcc: %.2f%%\tfSrcPredAcc: %.2f%%\trClsPredAcc:%.2f%%\tfClsPredAcc:%.2f%%\tTime cost: %.2f"
+				 %(epoch, Gls, Dls, rl_pred_acc*100, fk_pred_acc*100, rli_cls_acc*100, fki_cls_acc*100, tm))
 		return Gloss_rcd, Dloss_rcd, fkimg_rcd
 
 def mnist_trial():

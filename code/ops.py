@@ -76,6 +76,18 @@ def deconv2D(input, output_shape, scope_name, stride=2):
 		output = output + bi
 	return output
 
+def compute_src_pred(rl_pred, fk_pred):
+	batch_size = rl_pred.shape[0]
+	rl_pred_acc = np.round(rl_pred).sum()/float(batch_size)
+	fk_pred_acc = 1- np.round(fk_pred).sum()/float(batch_size)
+	return rl_pred_acc, fk_pred_acc
+
+def compute_cls_pred(rl_input, fk_input, labels):
+	batch_size = rl_input.shape[0]
+	rl_input_acc = np.sum(np.argmax(rl_input, 1) == np.argmax(labels, 1))/float(batch_size)
+	fk_input_acc = np.sum(np.argmax(fk_input, 1) == np.argmax(labels, 1))/float(batch_size)
+	return rl_input_acc, fk_input_acc
+
 
 
 
