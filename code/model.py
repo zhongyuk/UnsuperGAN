@@ -5,6 +5,7 @@ import time
 import scipy.stats
 from prepare_mnist import *
 from prepare_cifar import *
+from six.moves import cPickle as pickle
 
 def generate_Z(batch_size, z_dim): 
 	# sample from Gaussian normal
@@ -168,6 +169,9 @@ def train_model(Xr, yr, epoches, learning_rate):
 		d_optimizer = tf.train.AdamOptimizer(learning_rate, beta1=0.5).minimize(Dloss, 
 			var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='D'))
 
+	Gloss_rcd, Dloss_rcd = np.zeros(epoches), np.zeros(epoches)
+	fkimg_rcd = []
+
 	with tf.Session(graph=graph) as sess:
 		#sess.run(tf.global_variables_initializer())
 		tf.initialize_all_variables().run()
@@ -181,10 +185,17 @@ def train_model(Xr, yr, epoches, learning_rate):
 			feed_dict = {real_images: batch_X, true_cls: batch_y, tf_z: batch_Z, is_train:True}
 			_, _, Gls, Dls, fk_imgs = sess.run([g_optimizer, d_optimizer, Gloss, Dloss, fake_images],
 										feed_dict=feed_dict)
+			#_, Gls, fk_imgs = sess.run([g_optimizer, Gloss, fake_images], feed_dict=feed_dict)
+			#_, Dls			= sess.run([d_optimizer, Dloss], feed_dict=feed_dict)
 			tm = time.time()-t
+			Gloss_rcd[epoch] = Gls
+			Dloss_rcd[epoch] = Dls
+			if epoch%1000==0:
+				d = {'Xreal': batch_X, 'yreal': batch_y, 'generated': fk_imgs}
+				fkimg_rcd.append(d)
 			print("Epoch: %d\tGenerator loss: %.4f\t\tDiscriminator loss: %.4f\tTime cost: %.2f"
 				 %(epoch, Gls, Dls, tm))
-		return fk_imgs
+		return Gloss_rcd, Dloss_rcd, fkimg_rcd
 
 def mnist_trial():
 	mnist_fn = '/Users/Zhongyu/Documents/projects/kaggle/mnist/train.csv'
@@ -201,6 +212,9 @@ def cifar_trial():
 
 if __name__=='__main__':
 	Xr, yr = cifar_trial()
-	fk_imgs = train_model(Xr, yr, 5, 0.0002)
+	Grcd, Drcd, img_rcd = train_model(Xr, yr, 5, 0.0002)
+	rcd = {'Grcd':Grcd, 'Drcd':Drcd, 'img_rcd': img_rcd}
+	with open('rcd0', 'w') as fh:
+		pickle.dump(rcd, fh)
 
 
