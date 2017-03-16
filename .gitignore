@@ -11,3 +11,6 @@ data/*
 code/haarcascades/
 
 *.DS_Store
+
+#training record
+code/rcd*

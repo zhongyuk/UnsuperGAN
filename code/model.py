@@ -176,6 +176,8 @@ def train_model(Xr, yr, epoches, learning_rate):
 
 	Gloss_rcd, Dloss_rcd = np.zeros(epoches), np.zeros(epoches)
 	fkimg_rcd = []
+	src_pred = {'real_in': np.zeros(epoches), 'fake_in': np.zeros(epoches)}
+	cls_pred = {'real_in': np.zeros(epoches), 'fake_in': np.zeros(epoches)}
 
 	with tf.Session(graph=graph) as sess:
 		#sess.run(tf.global_variables_initializer())
@@ -197,13 +199,17 @@ def train_model(Xr, yr, epoches, learning_rate):
 			Dloss_rcd[epoch] = Dls
 			rl_pred_acc, fk_pred_acc = compute_src_pred(rl_pred, fk_pred)
 			rli_cls_acc, fki_cls_acc = compute_cls_pred(cls_pred_rlin, cls_pred_fkin, batch_y)
+			src_pred['real_in'][epoch] = rl_pred_acc
+			src_pred['fake_in'][epoch] = fk_pred_acc
+			cls_pred['real_in'][epoch] = rli_cls_acc
+			cls_pred['fake_in'][epoch] = fki_cls_acc
 
 			if epoch%1000==0:
 				d = {'Xreal': batch_X, 'yreal': batch_y, 'generated': fk_imgs}
 				fkimg_rcd.append(d)
 			print("Epoch: %d\tGloss: %.4f\tDloss: %.4f\trSrcPredAcc: %.2f%%\tfSrcPredAcc: %.2f%%\trClsPredAcc:%.2f%%\tfClsPredAcc:%.2f%%\tTime cost: %.2f"
 				 %(epoch, Gls, Dls, rl_pred_acc*100, fk_pred_acc*100, rli_cls_acc*100, fki_cls_acc*100, tm))
-		return Gloss_rcd, Dloss_rcd, fkimg_rcd
+		return Gloss_rcd, Dloss_rcd, fkimg_rcd, src_pred, cls_pred
 
 def mnist_trial():
 	mnist_fn = '/Users/Zhongyu/Documents/projects/kaggle/mnist/train.csv'
@@ -220,8 +226,8 @@ def cifar_trial():
 
 if __name__=='__main__':
 	Xr, yr = cifar_trial()
-	Grcd, Drcd, img_rcd = train_model(Xr, yr, 5, 0.0002)
-	rcd = {'Grcd':Grcd, 'Drcd':Drcd, 'img_rcd': img_rcd}
+	Grcd, Drcd, img_rcd, src_pred, cls_pred = train_model(Xr, yr, 5, 0.0002)
+	rcd = {'Grcd':Grcd, 'Drcd':Drcd, 'img_rcd': img_rcd, 'src_pred': src_pred, 'cls_pred': cls_pred}
 	with open('rcd0', 'w') as fh:
 		pickle.dump(rcd, fh)
 
