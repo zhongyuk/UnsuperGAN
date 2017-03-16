@@ -1,18 +1,32 @@
 import numpy as np
 import tensorflow as tf
-from utils import *
+from ops import *
+import time
+import scipy.stats
+from prepare_mnist import *
 
-# latent Z shape
-z_dim = 100
-G_wt_shapes = {'g_dense1' : [z_dim, 1024],
-				'g_dense2': [1024, 7*7*256],
-				'g_deconv1': [5, 5, 256, 64],
-				'g_deconv2': [5, 5, 64, 1]}
+def generate_Z(batch_size, z_dim): 
+	# sample from Gaussian normal
+	lower = -1.
+	upper = 1.
+	mu = 0.
+	sigma = 0.5
+	Z = scipy.stats.truncnorm.rvs(
+          (lower-mu)/sigma,(upper-mu)/sigma,loc=mu,scale=sigma,size=[batch_size, z_dim])
+	Z = Z.astype(np.float32)
+	return Z
 
+def embed(cls, Z):
+	# Perform simple MLP to achieve cls and noise joint latent vector
+	cls_embed = dense(cls, "embeding")
+	assert(cls_embed.get_shape().as_list()==Z.get_shape().as_list())
+	#cZ_joint = tf.multiply(cls_embed, Z) for TensorFlow 1.0
+	cZ_joint = tf.mul(cls_embed, Z)
+	return cZ_joint
 
-def generator(Z, is_training): # Z latent vector: [batch_size, z_dim]
-	# project Z into dense layer1 - Z - [-1, z_dim]
-	layer1 = dense(Z, "g_dense1")			#[-1, 1024]
+def generator(cZ, is_training): # cZ (class and noise joint) latent vector: [batch_size, z_dim]
+	# project cZ into dense layer1 - cZ - [-1, z_dim]
+	layer1 = dense(cZ, "g_dense1")			#[-1, 1024]
 	# Batch Norm
 	layer1 = batch_norm(layer1, 'g_dense1', is_training) #[-1, 1024]
 	# Activation
@@ -29,31 +43,28 @@ def generator(Z, is_training): # Z latent vector: [batch_size, z_dim]
 	reshaped = reshape_tensor(layer2, [-1, 7, 7, 256]) #[-1, 7, 7, 256]
 
 	# Deconv 2D
-	layer3 = deconv2D(reshaped, 'g_deconv1') 	#[-1, 14, 14, 64]
+	batch_size = reshaped.get_shape().as_list()[0]
+	layer3 = deconv2D(reshaped, [batch_size, 14, 14, 64], 'g_deconv1') 	#[-1, 14, 14, 64]
 	# Batch Norm
 	layer3 = batch_norm(layer3, 'g_deconv1', is_training) 	#[-1, 14, 14, 64]
 	# Activation
 	layer3 = activation(layer3, 'leaky')		#[-1, 14, 14, 64]
 
 	# Deconv 2D
-	layer4 = deconv2D(layer3, 'g_deconv2')		#[-1, 28, 28, 1]
+	layer4 = deconv2D(layer3, [batch_size, 28, 28, 1], 'g_deconv2')		#[-1, 28, 28, 1]
 	# output deconv layer no batch norm??
-	layer4 = activation(layer3, 'tanh') # recommend 'tanh' output
+	layer4 = activation(layer4, 'tanh') # recommend 'tanh' output
 
 	return layer4
 
-num_class = 10
-D_wt_shapes = {'d_conv1' : [5, 5, 1, 64],
-			   'd_conv2' : [5, 5, 64, 256],
-			   'd_dense1' : [7*7*256, 1024],
-			   'd_dense2' : [1024, num_class]} # only 2 category....
 
 def discriminator(X, is_training): # X - input image: [batch_size, 28, 28, 1]
 	# Conv2D - X: [-1, 28, 28, 1]
 	layer1 = conv2D(X, 'd_conv1') 								#[-1, 28, 28, 64]
-	layer1 = batch_norm(layer1, 'd_convlayer1', is_training)	#[-1, 28, 28, 64]
+	layer1 = batch_norm(layer1, 'd_conv1', is_training)	#[-1, 28, 28, 64]
 	layer1 = activation(layer1, 'leaky')						#[-1, 28, 28, 64]
 	layer1 = pooling(layer1, 'avg') 							#[-1, 14, 14, 64]
+	
 
 	# Conv2D
 	layer2 = conv2D(layer1, 'd_conv2')						#[-1, 14, 14, 256]
@@ -66,20 +77,112 @@ def discriminator(X, is_training): # X - input image: [batch_size, 28, 28, 1]
 
 	# Dense/FC
 	layer3 = dense(reshaped, 'd_dense1')					#[-1, 1024]
-	layer3 = batch_norm(layer3, 'd_dense1', is_training)					#[-1, 1024]
+	layer3 = batch_norm(layer3, 'd_dense1', is_training)	#[-1, 1024]
 	layer3 = activation(layer3, 'leaky')					#[-1, 1024]
 
 	# Dense/FC
-	layer4 = dense(layer3, 'd_dense2')						#[-1, num_class]
-	layer4 = batch_norm(layer4, 'd_dense2', is_training)					#[-1, num_class]
-	layer4 = activation(layer4, 'leaky')					#[-1, num_class]
+	dense_cls = dense(layer3, 'd_dense_cls')				#[-1, num_class]
+	#layer4 = batch_norm(layer4, 'd_dense2', is_training)	#[-1, num_class]
+	output_cls = activation(dense_cls, 'softmax')			#[-1, num_class]
 
-	return layer4
+	dense_src = dense(layer3, 'd_dense_src')				#[-1, 1]
+	output_src = activation(dense_src, 'sigmoid')			#[-1, 1]
 
-def prepare_G_input(z_dim, cls):
-	return
+	return [output_cls, output_src]
 
-def train_model(epoches):
+
+
+def train_model(Xr, yr, epoches, learning_rate):
+	batch_size = 64
+	real_src_np = np.ones([batch_size, 1], dtype=np.float32)
+	fake_src_np = np.zeros([batch_size, 1], dtype=np.float32)
+
+	# latent Z shape
+	z_dim = 100
+	num_class = 2
+
+	G_wt_shapes = [ ['embeding', [num_class, z_dim]	, z_dim, False],
+					['g_dense1', [z_dim, 1024]		, 1024, True],
+					['g_dense2', [1024, 7*7*256]	, 7*7*256, True],
+					['g_deconv1',[5, 5, 64, 256]	, 64, True],
+					['g_deconv2', [5, 5, 1, 64]		, 1, False] ]
+
+	D_wt_shapes = [['d_conv1',  [5, 5, 1, 64]	, 64,  True],
+				   ['d_conv2' , [5, 5, 64, 256]	, 256, True],
+				   ['d_dense1', [7*7*256, 1024]	, 1024, True],
+				   ['d_dense_src', [1024, 1]	, 1, False],# fake or real
+				   ['d_dense_cls', [1024, num_class], num_class, False]] # only 2 category....
+
 	graph = tf.Graph()
 	with graph.as_default():
-		
+		tf_z = tf.placeholder(tf.float32, shape=[batch_size, z_dim])
+		#d_f = tf.placeholder(tf.float32, shape=[batch_size, 28, 28, 1])
+		real_images = tf.placeholder(tf.float32, shape=[batch_size, 28, 28, 1])
+		real_src = tf.constant(real_src_np)
+		fake_src = tf.constant(fake_src_np)
+		true_cls = tf.placeholder(tf.float32, shape=[batch_size, num_class])
+
+		is_train = tf.placeholder(tf.bool)
+
+		# Initialize weights and biases within scopes 
+		with tf.variable_scope("G"):
+			for g_init in G_wt_shapes:
+				initialize_variables(g_init[0], g_init[1], g_init[2], g_init[3])
+
+		with tf.variable_scope("D"):
+			for d_init in D_wt_shapes:
+				initialize_variables(d_init[0], d_init[1], d_init[2], d_init[3])
+
+		# Feed data forward into the network
+		with tf.variable_scope("G", reuse=True):
+			cZ = embed(true_cls, tf_z)
+		with tf.variable_scope("G", reuse=True):
+			fake_images = generator(cZ, is_training=is_train)
+
+		with tf.variable_scope("D", reuse=True):	  
+			[fk_cls, fk_src] = discriminator(fake_images, is_training=is_train)
+		with tf.variable_scope("D", reuse=True):
+			[rl_cls, rl_src] = discriminator(real_images, is_training=is_train)
+
+		Lsrc = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(rl_src, real_src)) + \
+			   tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(fk_src, fake_src))
+		Lcls = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(fk_cls, true_cls)) + \
+			   tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(rl_cls, true_cls))
+
+		Dloss = Lcls + Lsrc
+		Gloss = Lcls - Lsrc
+		# manage gradient update for the Discriminator
+		#optimizer = tf.train.AdamOptimizer(learning_rate)
+		#grads_and_vars = optimizer.compute_gradients(Dloss, \
+			#tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='D'))
+		#optimizer.apply_gradients(grads_and_vars)
+
+		g_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(Gloss, 
+			var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='G'))
+		d_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(Dloss, 
+			var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='D'))
+
+	with tf.Session(graph=graph) as sess:
+		#sess.run(tf.global_variables_initializer())
+		tf.initialize_all_variables().run()
+		print('Initialized')
+		for epoch in range(epoches):
+			t = time.time()
+			offset = (epoch * batch_size) % (Xr.shape[0] - batch_size)
+			batch_X = Xr[offset:(offset+batch_size), :, :, :]
+			batch_y = yr[offset:(offset+batch_size), :]
+			batch_Z = generate_Z(batch_size, z_dim)
+			feed_dict = {real_images: batch_X, true_cls: batch_y, tf_z: batch_Z, is_train:True}
+			_, _, Gls, Dls, fk_imgs = sess.run([g_optimizer, d_optimizer, Gloss, Dloss, fake_images],
+										feed_dict=feed_dict)
+			tm = time.time()-t
+			print("Epoch: %d\tGenerator loss: %.4f\tDiscriminator loss: %.4f\tTime cost: %.2f"
+				 %(epoch, Gls, Dls, tm))
+
+
+if __name__=='__main__':
+	mnist_fn = '/Users/Zhongyu/Documents/projects/kaggle/mnist/train.csv'
+	Xr, yr = prepare_mnist2(mnist_fn)
+	train_model(Xr, yr, 25, 0.0002)
+
+
