@@ -34,18 +34,6 @@ def load_data(data_dir):
     test_labels = np.array(test_batch['labels'])
     return train_dataset, train_labels,  test_dataset, test_labels
 
-def augment_data_cifar10(features, labels):
-    # 50% Upside Down Filp; 50% Mirror Flip
-    ud_ind = np.random.binomial(1, .5, features.shape[0]).astype(np.bool)
-    lf_ind = np.invert(ud_ind)
-    ud_features, ud_labels = features[ud_ind, :,:,:], labels[ud_ind]
-    ud_features = ud_features[:, ::-1, :, :]
-    lf_features, lf_labels = features[lf_ind, :,:,:], labels[lf_ind]
-    lf_features = lf_features[:, :, ::-1, :]
-    cat_features = np.concatenate((features, ud_features, lf_features), axis=0)
-    cat_labels = np.concatenate((labels, ud_labels, lf_labels))
-    return cat_features, cat_labels
-
 def preprocess_data_cifar10(X, y, num_labels):
     # 1) One-hot encode labels
     # 2) Random Permute samples
@@ -62,10 +50,16 @@ def one_hot_encode(y, num_labels):
     y_encoded = np.arange(num_labels)==y[:, None]
     return y_encoded
 
+def scale_input(x):
+    '''scale input x to 0-1 range'''
+    scaled_x = (255*np.ones_like(x)-x)/255.
+    return scaled_x
+
 def prepare_cifar10_input(data_dir, augmentation=False):
     # Load Data
     print("Load data", "."*32)
     train_dataset, train_labels, test_dataset, test_labels = load_data(data_dir)
+    train_dataset, test_dataset = scale_input(train_dataset), scale_input(test_dataset)
     #train_dataset = whiten_data(train_dataset)
     #test_dataset = whiten_data(test_dataset)
 

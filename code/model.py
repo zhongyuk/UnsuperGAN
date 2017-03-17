@@ -9,7 +9,7 @@ from six.moves import cPickle as pickle
 
 def generate_Z(batch_size, z_dim): 
 	# sample from Gaussian normal
-	lower = -1.
+	lower = 0.
 	upper = 1.
 	mu = 0.
 	sigma = 0.5
@@ -58,12 +58,13 @@ def generator(cZ, is_training): # cZ (class and noise joint) latent vector: [bat
 	return layer4
 
 
-def discriminator(X, is_training): # X - input image: [batch_size, 32, 32, 3]
+def discriminator(X, is_training, keep_prob): # X - input image: [batch_size, 32, 32, 3]
 	# Conv2D - X: [-1, 32, 32, 3]
 	layer1 = conv2D(X, 'd_conv1') 								#[-1, 32, 32, 32]
 	#layer1 = batch_norm(layer1, 'd_conv1', is_training)		#[-1, 32, 32, 32]
 	layer1 = activation(layer1, 'leaky')						#[-1, 32, 32, 32]
 	layer1 = pooling(layer1, 'avg') 							#[-1, 16, 16, 32]
+	layer1 = tf.nn.dropout(layer1, keep_prob)
 	
 
 	# Conv2D
@@ -71,12 +72,14 @@ def discriminator(X, is_training): # X - input image: [batch_size, 32, 32, 3]
 	layer2 = batch_norm(layer2, 'd_conv2', is_training)		#[-1, 16, 16, 64]
 	layer2 = activation(layer2, 'leaky')					#[-1, 16, 16, 64]
 	layer2 = pooling(layer2, 'avg') 						#[-1, 8, 8, 64]
+	layer2 =  tf.nn.dropout(layer2, keep_prob)
 
 	# Conv2D
 	layer3 = conv2D(layer2, 'd_conv3')						#[-1, 8, 8, 128]
 	layer3 = batch_norm(layer3, 'd_conv3', is_training)		#[-1, 8, 8, 128]
 	layer3 = activation(layer3, 'leaky')					#[-1, 8, 8, 128]
 	layer3 = pooling(layer3, 'avg') 						#[-1, 4, 4, 128]
+	layer3 = tf.nn.dropout(layer3, keep_prob)
 
 	# Reshape
 	reshaped = reshape_tensor(layer3, [-1, 4*4*128]) 		#[-1, 4*4*128]
@@ -130,6 +133,7 @@ def train_model(Xr, yr, epoches, learning_rate):
 		true_cls = tf.placeholder(tf.float32, shape=[batch_size, num_class])
 
 		is_train = tf.placeholder(tf.bool)
+		keep_prob = tf.placeholder(tf.float32)
 
 		# Initialize weights and biases within scopes 
 		with tf.variable_scope("G"):
@@ -147,9 +151,9 @@ def train_model(Xr, yr, epoches, learning_rate):
 			fake_images = generator(cZ, is_training=is_train)
 
 		with tf.variable_scope("D", reuse=True):	  
-			[fk_cls, fk_src] = discriminator(fake_images, is_training=is_train)
+			[fk_cls, fk_src] = discriminator(fake_images, is_training=is_train, keep_prob=keep_prob)
 		with tf.variable_scope("D", reuse=True):
-			[rl_cls, rl_src] = discriminator(real_images, is_training=is_train)
+			[rl_cls, rl_src] = discriminator(real_images, is_training=is_train, keep_prob=keep_prob)
 
 		Lsrc = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(rl_src, real_src)) + \
 			   tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(fk_src, fake_src))
@@ -189,7 +193,7 @@ def train_model(Xr, yr, epoches, learning_rate):
 			batch_X = Xr[offset:(offset+batch_size), :, :, :]
 			batch_y = yr[offset:(offset+batch_size), :]
 			batch_Z = generate_Z(batch_size, z_dim)
-			feed_dict = {real_images: batch_X, true_cls: batch_y, tf_z: batch_Z, is_train:True}
+			feed_dict = {real_images: batch_X, true_cls: batch_y, tf_z: batch_Z, is_train:True, keep_prob: 0.5}
 			_, _, Gls, Dls, fk_imgs, rl_pred, fk_pred, cls_pred_rlin, cls_pred_fkin = sess.run([g_optimizer, d_optimizer, \
 				Gloss, Dloss, fake_images, rl_src_pred, fk_src_pred, rl_cls_pred, fk_cls_pred], feed_dict=feed_dict)
 			#_, Gls, fk_imgs = sess.run([g_optimizer, Gloss, fake_images], feed_dict=feed_dict)
