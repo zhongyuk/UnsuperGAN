@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 
 def initialize_variables(scope_name, wt_shape, bi_shape, bn_bool,\
-	initializer=tf.truncated_normal_initializer(stddev=.013)):
+	initializer=tf.truncated_normal_initializer(stddev=.02)):
 	with tf.variable_scope(scope_name) as scp:
 		wt = tf.get_variable("wt", wt_shape, initializer=initializer)
 		bi = tf.get_variable("bi", bi_shape, initializer=tf.constant_initializer(1.0))

@@ -36,9 +36,9 @@ def plot_GDimgs(xreal, xfake, savename):
 	plt.imshow(samplef2)
 	plt.savefig(savename+".png")
 
-def visulize(rcdfn, save_imgfn):
+def visulize(rcdfn, save_imgfn, imgsid):
 	data = unpickle(rcdfn)
-	images = data['img_rcd'][-1]
+	images = data['img_rcd'][imgsid]
 	xreals = images['Xreal']
 	xfakes = images['generated']
 	plot_GDimgs(xreals, xfakes, save_imgfn)
@@ -50,5 +50,37 @@ def test_plot_GDimgs():
 	xfakes = images['generated']
 	plot_GDimgs(xreals, xfakes, "testimg")
 
+def plot_loss(record):
+    G_loss = record['Grcd']
+    D_loss = record['Drcd']
+    epoches = np.array(range(G_loss.shape[0]))
+    plt.plot(epoches, G_loss, label='Generator Loss')
+    plt.plot(epoches, D_loss, label='Discriminator Loss')
+    plt.xlim([0, G_loss.shape[0]+3])
+    plt.legend(loc='upper right')
+    plt.show()
+
+def plot_pred_acc(record):
+    src_pred = rcd['src_pred']
+    cls_pred = rcd['cls_pred']
+    src_pred_fake_in = src_pred['fake_in']
+    src_pred_real_in = src_pred['real_in']
+    cls_pred_fake_in = cls_pred['fake_in']
+    cls_pred_real_in = cls_pred['real_in']
+    epoches = np.array(range(src_pred_fake_in.shape[0]))
+    plt.subplot(211)
+    plt.plot(epoches, src_pred_fake_in, label='Source Prediction - fake input')
+    plt.plot(epoches, src_pred_real_in, label='Source Prediction - real input')
+    plt.legend(loc='lower right'); 
+    plt.ylim([0., 1.1]);plt.show();
+    plt.subplot(212)
+    plt.plot(epoches, cls_pred_fake_in, label='Class Prediction - fake input')
+    plt.plot(epoches, cls_pred_real_in, label='Class Prediction - real input')
+    plt.legend(loc='lower right')
+    plt.ylim([0., 1.1]); plt.show()
+
 if __name__=='__main__':
-	test_plot_GDimgs()
+	#test_plot_GDimgs()
+	rcdfn = 'train_rcd/rcd3'
+	savename = 'rcd3_samples1'
+	visulize(rcdfn, savename, imgsid=25)

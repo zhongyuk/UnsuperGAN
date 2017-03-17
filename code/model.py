@@ -194,6 +194,7 @@ def train_model(Xr, yr, epoches, learning_rate):
 			batch_y = yr[offset:(offset+batch_size), :]
 			batch_Z = generate_Z(batch_size, z_dim)
 			feed_dict = {real_images: batch_X, true_cls: batch_y, tf_z: batch_Z, is_train:True, keep_prob: 0.5}
+			_ = sess.run(g_optimizer, feed_dict=feed_dict)
 			_, _, Gls, Dls, fk_imgs, rl_pred, fk_pred, cls_pred_rlin, cls_pred_fkin = sess.run([g_optimizer, d_optimizer, \
 				Gloss, Dloss, fake_images, rl_src_pred, fk_src_pred, rl_cls_pred, fk_cls_pred], feed_dict=feed_dict)
 			#_, Gls, fk_imgs = sess.run([g_optimizer, Gloss, fake_images], feed_dict=feed_dict)
@@ -230,7 +231,7 @@ def cifar_trial():
 
 if __name__=='__main__':
 	Xr, yr = cifar_trial()
-	Grcd, Drcd, img_rcd, src_pred, cls_pred = train_model(Xr, yr, 5, 0.0002)
+	Grcd, Drcd, img_rcd, src_pred, cls_pred = train_model(Xr, yr, 5, 0.0001)
 	rcd = {'Grcd':Grcd, 'Drcd':Drcd, 'img_rcd': img_rcd, 'src_pred': src_pred, 'cls_pred': cls_pred}
 	with open('rcd0', 'w') as fh:
 		pickle.dump(rcd, fh)

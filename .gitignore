@@ -14,3 +14,6 @@ code/haarcascades/
 
 #training record
 *rcd*
+
+# notebook checkpoints
+.ipynb_checkpoints*
