@@ -62,8 +62,8 @@ def prepare_cifar10_input(data_dir, augmentation=False):
     print "Reformat data", "."*32
     train_dataset = np.rollaxis(train_dataset.reshape((-1,3,32,32)), 1, 4)
     test_dataset = np.rollaxis(test_dataset.reshape((-1,3,32,32)), 1, 4)
-    train_labels = one_hot_encode(train_labels, num_channels)
-    test_labels = one_hot_encode(test_labels, num_channels)
+    train_labels = one_hot_encode(train_labels, num_labels)
+    test_labels = one_hot_encode(test_labels, num_labels)
     print 'Dataset\t\tFeatureShape\t\tLabelShape'
     print 'Training set:\t', train_dataset.shape,'\t', train_labels.shape
     print 'Testing set:\t', test_dataset.shape, '\t', test_labels.shape
