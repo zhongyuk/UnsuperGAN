@@ -15,13 +15,13 @@ def rescale(img):
 	return img_scaled.astype('uint8')
 
 def plot_GDimgs(xreal, xfake, savename):
-	sampler0 = rescale(xreal[0,:,:,:])
-	samplef0 = rescale(xfake[0,:,:,:])
+	sampler0 = xreal[0,:,:,:]
+	samplef0 = xfake[0,:,:,:]
 	mid = int(xreal.shape[0]/2)
-	sampler1 = rescale(xreal[mid,:,:,:])
-	samplef1 = rescale(xfake[mid,:,:,:])
-	sampler2 = rescale(xreal[-1,:,:,:])
-	samplef2 = rescale(xfake[-1,:,:,:])
+	sampler1 = xreal[mid,:,:,:]
+	samplef1 = xfake[mid,:,:,:]
+	sampler2 = xreal[-1,:,:,:]
+	samplef2 = xfake[-1,:,:,:]
 	plt.subplot(321)
 	plt.imshow(sampler0)
 	plt.subplot(322)
